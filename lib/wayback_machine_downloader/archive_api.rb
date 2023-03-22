@@ -3,15 +3,15 @@ require 'uri'
 
 module ArchiveAPI
 
-  def get_raw_list_from_api url, page_index
+  def get_raw_list_from_api page_index
     request_url = URI("https://web.archive.org/cdx/search/xd")
-    params = [["output", "json"], ["url", url]]
+    params = [["output", "json"]]
     params += parameters_for_api page_index
     request_url.query = URI.encode_www_form(params)
 
     begin
       json = JSON.parse(URI(request_url).open.read)
-      if (json[0] <=> ["timestamp","original"]) == 0
+      if (json[0] <=> ["timestamp","original","digest"]) == 0
         json.shift
       end
       json
@@ -21,7 +21,7 @@ module ArchiveAPI
   end
 
   def parameters_for_api page_index
-    parameters = [["fl", "timestamp,original"], ["collapse", "digest"], ["gzip", "false"]]
+    parameters = [["url", @base_url], ["fl", "timestamp,original,digest"], ["collapse", "digest"], ["gzip", "false"], ["matchType", @match_type.to_s]]
     if !@all
       parameters.push(["filter", "statuscode:200"])
     end

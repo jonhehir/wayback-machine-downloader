@@ -14,15 +14,15 @@ class WaybackMachineDownloader
 
   include ArchiveAPI
 
-  VERSION = "2.3.1"
+  VERSION = "2.3.2"
 
-  attr_accessor :base_url, :exact_url, :directory, :all_timestamps,
+  attr_accessor :base_url, :match_type, :directory, :all_timestamps,
     :from_timestamp, :to_timestamp, :only_filter, :exclude_filter, 
-    :all, :maximum_pages, :threads_count
+    :all, :maximum_pages, :threads_count, :digest_filename
 
   def initialize params
     @base_url = params[:base_url]
-    @exact_url = params[:exact_url]
+    @match_type = params[:match_type]
     @directory = params[:directory]
     @all_timestamps = params[:all_timestamps]
     @from_timestamp = params[:from_timestamp].to_i
@@ -32,6 +32,7 @@ class WaybackMachineDownloader
     @all = params[:all]
     @maximum_pages = params[:maximum_pages] ? params[:maximum_pages].to_i : 100
     @threads_count = params[:threads_count].to_i
+    @digest_filename = params[:digest_filename]
   end
 
   def backup_name
@@ -85,11 +86,11 @@ class WaybackMachineDownloader
     # but from a less fresh index
     print "Getting snapshot pages"
     snapshot_list_to_consider = []
-    snapshot_list_to_consider += get_raw_list_from_api(@base_url, nil)
+    snapshot_list_to_consider += get_raw_list_from_api(nil)
     print "."
-    unless @exact_url
+    unless @match_type == :exact
       @maximum_pages.times do |page_index|
-        snapshot_list = get_raw_list_from_api(@base_url + '/*', page_index)
+        snapshot_list = get_raw_list_from_api(page_index)
         break if snapshot_list.empty?
         snapshot_list_to_consider += snapshot_list
         print "."
@@ -102,7 +103,7 @@ class WaybackMachineDownloader
 
   def get_file_list_curated
     file_list_curated = Hash.new
-    get_all_snapshots_to_consider.each do |file_timestamp, file_url|
+    get_all_snapshots_to_consider.each do |file_timestamp, file_url, digest|
       next unless file_url.include?('/')
       file_id = file_url.split('/')[3..-1].join('/')
       file_id = CGI::unescape file_id 
@@ -116,10 +117,10 @@ class WaybackMachineDownloader
           puts "File url doesn't match only filter, ignoring: #{file_url}"
         elsif file_list_curated[file_id]
           unless file_list_curated[file_id][:timestamp] > file_timestamp
-            file_list_curated[file_id] = {file_url: file_url, timestamp: file_timestamp}
+            file_list_curated[file_id] = {file_url: file_url, timestamp: file_timestamp, digest: digest}
           end
         else
-          file_list_curated[file_id] = {file_url: file_url, timestamp: file_timestamp}
+          file_list_curated[file_id] = {file_url: file_url, timestamp: file_timestamp, digest: digest}
         end
       end
     end
@@ -128,7 +129,7 @@ class WaybackMachineDownloader
 
   def get_file_list_all_timestamps
     file_list_curated = Hash.new
-    get_all_snapshots_to_consider.each do |file_timestamp, file_url|
+    get_all_snapshots_to_consider.each do |file_timestamp, file_url, digest|
       next unless file_url.include?('/')
       file_id = file_url.split('/')[3..-1].join('/')
       file_id_and_timestamp = [file_timestamp, file_id].join('/')
@@ -144,7 +145,7 @@ class WaybackMachineDownloader
         elsif file_list_curated[file_id_and_timestamp]
           puts "Duplicate file and timestamp combo, ignoring: #{file_id}" if @verbose
         else
-          file_list_curated[file_id_and_timestamp] = {file_url: file_url, timestamp: file_timestamp}
+          file_list_curated[file_id_and_timestamp] = {file_url: file_url, timestamp: file_timestamp, digest: digest}
         end
       end
     end
@@ -248,20 +249,25 @@ class WaybackMachineDownloader
     file_url = file_remote_info[:file_url].encode(current_encoding)
     file_id = file_remote_info[:file_id]
     file_timestamp = file_remote_info[:timestamp]
-    file_path_elements = file_id.split('/')
-    if file_id == ""
+    if @digest_filename
       dir_path = backup_path
-      file_path = backup_path + 'index.html'
-    elsif file_url[-1] == '/' or not file_path_elements[-1].include? '.'
-      dir_path = backup_path + file_path_elements[0..-1].join('/')
-      file_path = backup_path + file_path_elements[0..-1].join('/') + '/index.html'
+      file_path = backup_path + file_remote_info[:digest]
     else
-      dir_path = backup_path + file_path_elements[0..-2].join('/')
-      file_path = backup_path + file_path_elements[0..-1].join('/')
-    end
-    if Gem.win_platform?
-      dir_path = dir_path.gsub(/[:*?&=<>\\|]/) {|s| '%' + s.ord.to_s(16) }
-      file_path = file_path.gsub(/[:*?&=<>\\|]/) {|s| '%' + s.ord.to_s(16) }
+      file_path_elements = file_id.split('/')
+      if file_id == ""
+        dir_path = backup_path
+        file_path = backup_path + 'index.html'
+      elsif file_url[-1] == '/' or not file_path_elements[-1].include? '.'
+        dir_path = backup_path + file_path_elements[0..-1].join('/')
+        file_path = backup_path + file_path_elements[0..-1].join('/') + '/index.html'
+      else
+        dir_path = backup_path + file_path_elements[0..-2].join('/')
+        file_path = backup_path + file_path_elements[0..-1].join('/')
+      end
+      if Gem.win_platform?
+        dir_path = dir_path.gsub(/[:*?&=<>\\|]/) {|s| '%' + s.ord.to_s(16) }
+        file_path = file_path.gsub(/[:*?&=<>\\|]/) {|s| '%' + s.ord.to_s(16) }
+      end
     end
     unless File.exist? file_path
       begin

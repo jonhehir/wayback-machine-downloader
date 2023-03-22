@@ -1,5 +1,6 @@
-FROM ruby:2.3
+FROM ruby:3.2
 COPY . /build
 RUN cd build && \
-    bundle install
-ENTRYPOINT [ "/usr/local/bundle/bin/wayback_machine_downloader" ]
+    gem build wayback_machine_downloader.gemspec && \
+    gem install *.gem
+ENTRYPOINT [ "wayback_machine_downloader" ]

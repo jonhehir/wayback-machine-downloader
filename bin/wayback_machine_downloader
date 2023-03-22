@@ -4,7 +4,9 @@ require_relative '../lib/wayback_machine_downloader'
 require 'optparse'
 require 'pp'
 
-options = {}
+options = {
+  :match_type => :prefix
+}
 option_parser = OptionParser.new do |opts|
   opts.banner = "Usage: wayback_machine_downloader http://example.com"
 
@@ -30,10 +32,6 @@ option_parser = OptionParser.new do |opts|
     options[:to_timestamp] = t
   end
 
-  opts.on("-e", "--exact-url", "Download only the url provied and not the full site") do |t|
-    options[:exact_url] = t
-  end
-
   opts.on("-o", "--only ONLY_FILTER", String, "Restrict downloading to urls that match this filter", "(use // notation for the filter to be treated as a regex)") do |t|
     options[:only_filter] = t
   end
@@ -56,6 +54,22 @@ option_parser = OptionParser.new do |opts|
 
   opts.on("-l", "--list", "Only list file urls in a JSON format with the archived timestamps, won't download anything") do |t|
     options[:list] = true
+  end
+
+  opts.on("-e", "--exact-url", "Download only the url provided and not the full site") do |t|
+    options[:match_type] = :exact
+  end
+
+  opts.on("-h", "--host-url", "Download urls matching the host, excluding other subdomains") do |t|
+    options[:match_type] = :host
+  end
+
+  opts.on("-g", "--domain-url", "Download urls matching the domain, including other subdomains") do |t|
+    options[:match_type] = :domain
+  end
+
+  opts.on("-q", "--digest-filename", "Use digests as filenames rather than original filenames") do |t|
+    options[:digest_filename] = true
   end
 
   opts.on("-v", "--version", "Display version") do |t|
